@@ -1,6 +1,93 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
-// ─── RENK PALETİ & STİL SABİTLERİ ───────────────────────────────────────────
+// ─── PDF & CSV YARDIMCI FONKSİYONLAR ─────────────────────────────────────────
+
+const loadJsPDF = () => new Promise((resolve) => {
+  if (window.jspdf) { resolve(window.jspdf); return; }
+  const s1 = document.createElement("script");
+  s1.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+  s1.onload = () => {
+    const s2 = document.createElement("script");
+    s2.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js";
+    s2.onload = () => resolve(window.jspdf);
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+});
+
+function csvIndir(satirlar, basliklar, dosyaAdi) {
+  const bom = "\uFEFF";
+  const icerik = [basliklar, ...satirlar].map(s => s.map(h => `"${String(h).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([bom + icerik], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = dosyaAdi; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function pdfIndir(baslik, tablolar, dosyaAdi, altBilgi) {
+  const { jsPDF } = await loadJsPDF();
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const tarih = new Date().toLocaleDateString("tr-TR");
+  doc.setFillColor(15,17,23);
+  doc.rect(0,0,297,20,"F");
+  doc.setTextColor(124,184,255); doc.setFontSize(13); doc.setFont("helvetica","bold");
+  doc.text(baslik, 14, 13);
+  doc.setTextColor(136,146,170); doc.setFontSize(9); doc.setFont("helvetica","normal");
+  doc.text("Tarih: " + tarih, 250, 13);
+  let y = 26;
+  tablolar.forEach(({ altBaslik, kolonlar, satirlar, notlar }) => {
+    if (altBaslik) {
+      doc.setTextColor(62,207,142); doc.setFontSize(10); doc.setFont("helvetica","bold");
+      doc.text(altBaslik, 14, y); y += 5;
+    }
+    doc.autoTable({
+      startY: y, head: [kolonlar], body: satirlar, theme: "grid",
+      styles: { fontSize: 8, cellPadding: 2, textColor: [40,40,40] },
+      headStyles: { fillColor: [31,37,53], textColor: [124,184,255], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [245,247,250] },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+    if (notlar) { doc.setTextColor(100,100,100); doc.setFontSize(8); doc.text(notlar, 14, y); y += 8; }
+  });
+  if (altBilgi) { doc.setTextColor(150,150,150); doc.setFontSize(7); doc.text(altBilgi, 14, doc.internal.pageSize.height - 8); }
+  doc.save(dosyaAdi);
+}
+
+function IndirButonlari({ onCSV, onPDF, yukleniyor }) {
+  return (
+    <div style={{display:"flex",gap:6}}>
+      <button className="btn btn-ghost btn-sm" onClick={onCSV}
+        style={{fontSize:11,padding:"5px 10px",color:"var(--green)",borderColor:"rgba(62,207,142,.3)"}}>
+        ⬇ CSV
+      </button>
+      <button className="btn btn-ghost btn-sm" onClick={onPDF} disabled={yukleniyor}
+        style={{fontSize:11,padding:"5px 10px",color:"var(--accent2)",borderColor:"rgba(79,142,247,.3)"}}>
+        {yukleniyor ? "⏳ Hazırlanıyor..." : "⬇ PDF"}
+      </button>
+    </div>
+  );
+}
+
+// ─── LOCAL STORAGE HOOK ───────────────────────────────────────────────────────
+function useLocalState(anahtar, varsayilan) {
+  const [deger, setDeger] = useState(() => {
+    try {
+      const kayitli = localStorage.getItem(anahtar);
+      return kayitli ? JSON.parse(kayitli) : varsayilan;
+    } catch { return varsayilan; }
+  });
+  const guncelle = useCallback((yeni) => {
+    setDeger(onceki => {
+      const sonDeger = typeof yeni === "function" ? yeni(onceki) : yeni;
+      try { localStorage.setItem(anahtar, JSON.stringify(sonDeger)); } catch {}
+      return sonDeger;
+    });
+  }, [anahtar]);
+  return [deger, guncelle];
+}
+
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
@@ -263,6 +350,17 @@ export default function MaliyetApp() {
             </div>
           </div>
           <span className="topbar-badge">✓ Tüm Modüller</span>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{fontSize:10,color:"var(--red)",borderColor:"rgba(255,85,85,.2)",marginLeft:8}}
+            onClick={()=>{
+              if(window.confirm("Tüm veriler sıfırlanacak. Emin misiniz?")) {
+                ["mm_giderler","mm_merkezler","mm_gugGiderler","mm_isEmirleri","mm_tahGug","mm_tahSaat","mm_stdUrunler","mm_cvpUrunler","mm_cvpSabit","mm_cvpSecili","mm_butce","mm_safhalar"].forEach(k=>localStorage.removeItem(k));
+                window.location.reload();
+              }
+            }}>
+            ↺ Sıfırla
+          </button>
         </header>
 
         {/* TABS */}
@@ -297,7 +395,7 @@ export default function MaliyetApp() {
 
 // ─── MODÜL 1: GİDER SINIFLANDIRMA ────────────────────────────────────────────
 function ModulGiderSiniflandirma() {
-  const [giderler, setGiderler] = useState([
+  const [giderler, setGiderler] = useLocalState("mm_giderler", [
     { id: 1, ad: "Çelik sac hammadde", hesapKodu: "710", tutar: 45000, davranis: "Değişken", yukleme: "Direkt",   not: "Ocak üretim partisi" },
     { id: 2, ad: "Fabrika kirası",      hesapKodu: "730", tutar: 18000, davranis: "Sabit",    yukleme: "Endirekt", not: "Aylık sabit kira" },
     { id: 3, ad: "Üretim işçisi maaşı", hesapKodu: "720", tutar: 32000, davranis: "Sabit",    yukleme: "Direkt",   not: "4 işçi × 8.000 TL" },
@@ -491,9 +589,28 @@ function ModulGiderSiniflandirma() {
 
       {/* GİDER LİSTESİ */}
       <div className="card">
-        <div className="card-title" style={{display:"flex",justifyContent:"space-between"}}>
-          <span>Gider Listesi</span>
-          <span style={{fontWeight:400,color:"var(--muted)"}}>{giderler.length} kayıt</span>
+        <div className="card-title" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span>Gider Listesi <span style={{fontWeight:400,color:"var(--muted)"}}>{giderler.length} kayıt</span></span>
+          <IndirButonlari
+            onCSV={()=>{
+              const bas = ["Gider Adı","Hesap Kodu","Hesap Adı","Tutar (TL)","Davranış","Yükleme","Not"];
+              const sat = giderler.map(g=>[g.ad, g.hesapKodu, HESAP_KODLARI[g.hesapKodu]||"", g.tutar, g.davranis, g.yukleme, g.not||""]);
+              csvIndir(sat, bas, `gider-siniflandirma-${new Date().toISOString().slice(0,10)}.csv`);
+            }}
+            onPDF={async()=>{
+              await pdfIndir(
+                "Gider Sınıflandırma Raporu",
+                [{
+                  altBaslik: "Gider Listesi",
+                  kolonlar: ["Gider Adı","Hesap Kodu","Tutar (TL)","Davranış","Yükleme","Not"],
+                  satirlar: giderler.map(g=>[g.ad, g.hesapKodu+" - "+(HESAP_KODLARI[g.hesapKodu]||""), g.tutar.toLocaleString("tr-TR")+" ₺", g.davranis, g.yukleme, g.not||"-"]),
+                  notlar: `Toplam: ${toplam.toLocaleString("tr-TR")} ₺  |  Sabit: ${sabit.toLocaleString("tr-TR")} ₺  |  Değişken: ${degisken.toLocaleString("tr-TR")} ₺`
+                }],
+                `gider-siniflandirma-${new Date().toISOString().slice(0,10)}.pdf`,
+                "Maliyet Muhasebesi Uzmanlaşma Programı"
+              );
+            }}
+          />
         </div>
         {giderler.length === 0 ? (
           <div className="empty">
@@ -634,8 +751,8 @@ const VARSAYILAN_GUGGERLER = [
 ];
 
 function ModulGUGDagitim() {
-  const [merkezler, setMerkezler] = useState(VARSAYILAN_MERKEZLER);
-  const [gugGiderler, setGugGiderler] = useState(VARSAYILAN_GUGGERLER);
+  const [merkezler, setMerkezler] = useLocalState("mm_merkezler", VARSAYILAN_MERKEZLER);
+  const [gugGiderler, setGugGiderler] = useLocalState("mm_gugGiderler", VARSAYILAN_GUGGERLER);
   const [yeniGider, setYeniGider] = useState({ ad: "", tutar: "", anahtar: ANAHTARLAR[0] });
   const [yeniMerkez, setYeniMerkez] = useState({ ad: "", tip: "Üretim" });
   const [aktifAdim, setAktifAdim] = useState(1);
@@ -716,6 +833,45 @@ function ModulGUGDagitim() {
         {[{n:1,label:"1. Ön Dağıtım"},{n:2,label:"2. Kesin Dağıtım"},{n:3,label:"3. Anahtarlar"}].map(({n,label}) => (
           <button key={n} className={`btn ${aktifAdim===n ? "btn-primary" : "btn-ghost"}`} onClick={() => setAktifAdim(n)}>{label}</button>
         ))}
+        <div style={{marginLeft:"auto"}}>
+          <IndirButonlari
+            onCSV={()=>{
+              const bas = ["Gider Kalemi","Tutar (TL)","Dağıtım Anahtarı",...merkezler.map(m=>m.ad+" ("+m.tip+")")];
+              const sat = gugGiderler.map(g=>{
+                const toplamA = merkezler.reduce((s,m)=>s+(m.degerler[g.anahtar]||0),0);
+                return [g.ad, g.tutar, g.anahtar, ...merkezler.map(m=>{
+                  const pay = toplamA>0?(m.degerler[g.anahtar]||0)/toplamA:0;
+                  return (g.tutar*pay).toFixed(2);
+                })];
+              });
+              csvIndir(sat, bas, `gug-dagitim-${new Date().toISOString().slice(0,10)}.csv`);
+            }}
+            onPDF={async()=>{
+              const onDagBas = ["GÜG Kalemi","Tutar (TL)","Anahtar",...merkezler.map(m=>m.ad)];
+              const onDagSat = gugGiderler.map(g=>{
+                const toplamA = merkezler.reduce((s,m)=>s+(m.degerler[g.anahtar]||0),0);
+                return [g.ad, g.tutar.toLocaleString("tr-TR")+" ₺", g.anahtar, ...merkezler.map(m=>{
+                  const pay = toplamA>0?(m.degerler[g.anahtar]||0)/toplamA:0;
+                  return (g.tutar*pay).toLocaleString("tr-TR")+" ₺";
+                })];
+              });
+              const kesin = (() => {
+                const um = onDagitim.filter(m=>m.tip==="Üretim");
+                const ym = onDagitim.filter(m=>m.tip==="Yardımcı");
+                const ti = um.reduce((s,m)=>s+(m.degerler["İşçi Sayısı"]||0),0);
+                return um.map(u=>{
+                  const pay = ti>0?(u.degerler["İşçi Sayısı"]||0)/ti:0;
+                  const yp = ym.reduce((s,y)=>s+y.onDagitimToplam*pay,0);
+                  return [u.ad, u.degerler["İşçi Sayısı"], (pay*100).toFixed(1)+"%", u.onDagitimToplam.toLocaleString("tr-TR")+" ₺", "+"+yp.toLocaleString("tr-TR")+" ₺", (u.onDagitimToplam+yp).toLocaleString("tr-TR")+" ₺"];
+                });
+              })();
+              await pdfIndir("GÜG Dağıtım Tablosu", [
+                { altBaslik:"Ön Dağıtım", kolonlar: onDagBas, satirlar: onDagSat },
+                { altBaslik:"Kesin Dağıtım", kolonlar:["Merkez","İşçi","Pay%","Ön Dağıtım","Yardımcı Pay","Kesin Toplam"], satirlar: kesin },
+              ], `gug-dagitim-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+            }}
+          />
+        </div>
       </div>
 
       <div className="stat-grid">
@@ -965,10 +1121,10 @@ const IS_EMIRLERI_VARSAYILAN = [
 ];
 
 function ModulSiparisUretim() {
-  const [isEmirleri, setIsEmirleri] = useState(IS_EMIRLERI_VARSAYILAN);
+  const [isEmirleri, setIsEmirleri] = useLocalState("mm_isEmirleri", IS_EMIRLERI_VARSAYILAN);
   const [secili, setSecili] = useState(null);
-  const [tahGuG, setTahGuG] = useState(179000);
-  const [tahSaat, setTahSaat]  = useState(1800);
+  const [tahGuG, setTahGuG] = useLocalState("mm_tahGug", 179000);
+  const [tahSaat, setTahSaat] = useLocalState("mm_tahSaat", 1800);
   const [yeniForm, setYeniForm] = useState({
     id: "", musteri: "", urun: "", acilis: new Date().toISOString().slice(0,10), durum: "Devam Ediyor",
     malzeme: "", iscilik: "", iscilikSaati: ""
@@ -1065,10 +1221,27 @@ function ModulSiparisUretim() {
       </div>
 
       {/* NAV */}
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
         <button className={`btn ${panel==="liste"?"btn-primary":"btn-ghost"}`} onClick={()=>{setPanel("liste");setSecili(null);}}>İş Emirleri Listesi</button>
         <button className={`btn ${panel==="yeni"?"btn-primary":"btn-ghost"}`} onClick={()=>setPanel("yeni")}>+ Yeni İş Emri</button>
         {secili && <button className={`btn ${panel==="detay"?"btn-primary":"btn-ghost"}`} onClick={()=>setPanel("detay")}>📄 {secili} Detay</button>}
+        <div style={{marginLeft:"auto"}}>
+          <IndirButonlari
+            onCSV={()=>{
+              const bas = ["İş Emri No","Müşteri","Ürün","Açılış","Durum","710 Malzeme","720 İşçilik","GÜG Yüklenen","Toplam Maliyet"];
+              const sat = emirlerHesapli.map(e=>[e.id, e.musteri, e.urun, e.acilis, e.durum, e.malzeme, e.iscilik, e.gugYuklenen.toFixed(2), e.toplamMaliyet.toFixed(2)]);
+              csvIndir(sat, bas, `siparis-maliyeti-${new Date().toISOString().slice(0,10)}.csv`);
+            }}
+            onPDF={async()=>{
+              await pdfIndir("Sipariş Maliyeti Raporu", [{
+                altBaslik: "İş Emirleri",
+                kolonlar: ["İş Emri","Müşteri","Ürün","Durum","710 Malzeme","720 İşçilik","GÜG Yüklenen","TOPLAM"],
+                satirlar: emirlerHesapli.map(e=>[e.id, e.musteri, e.urun, e.durum, e.malzeme.toLocaleString("tr-TR")+" ₺", e.iscilik.toLocaleString("tr-TR")+" ₺", Math.round(e.gugYuklenen).toLocaleString("tr-TR")+" ₺", Math.round(e.toplamMaliyet).toLocaleString("tr-TR")+" ₺"]),
+                notlar: `GÜG Yükleme Oranı: ${Math.round(gugOrani).toLocaleString("tr-TR")} ₺/saat  |  Toplam Maliyet: ${Math.round(toplamMaliyet).toLocaleString("tr-TR")} ₺`
+              }], `siparis-maliyeti-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+            }}
+          />
+        </div>
       </div>
 
       {/* İŞ EMİRLERİ LİSTESİ */}
@@ -1386,7 +1559,7 @@ function SapmaBadge({ deger }) {
 }
 
 function ModulStandartMaliyet() {
-  const [urunler, setUrunler] = useState(URUN_STANDARTLARI_VARSAYILAN);
+  const [urunler, setUrunler] = useLocalState("mm_stdUrunler", URUN_STANDARTLARI_VARSAYILAN);
   const [secili, setSecili]   = useState(urunler[0].id);
   const [duzenle, setDuzenle] = useState(false);
   const [form, setForm]       = useState(null);
@@ -1459,6 +1632,35 @@ function ModulStandartMaliyet() {
 
       {aktifUrun && sapma && !duzenle && (
         <>
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+            <IndirButonlari
+              onCSV={()=>{
+                const bas = ["Sapma Türü","Standart","Gerçek","Sapma (TL)","Lehte/Aleyhte","Sorumluluk"];
+                const sat = [
+                  ["Malzeme Fiyat", aktifUrun.stdMalzemeFiyat+" TL/kg", aktifUrun.gercekMalzemeFiyat+" TL/kg", sapma.malzemeFiyatSapma.toFixed(2), sapma.malzemeFiyatSapma>=0?"Lehte":"Aleyhte","Satın Alma"],
+                  ["Malzeme Miktar", aktifUrun.stdMalzemeMiktar+" kg/adet", aktifUrun.gercekMalzemeMiktar+" kg/adet", sapma.malzemeMiktarSapma.toFixed(2), sapma.malzemeMiktarSapma>=0?"Lehte":"Aleyhte","Üretim"],
+                  ["İşçilik Ücret", aktifUrun.stdIscilikUcret+" TL/saat", aktifUrun.gercekIscilikUcret+" TL/saat", sapma.iscilikUcretSapma.toFixed(2), sapma.iscilikUcretSapma>=0?"Lehte":"Aleyhte","İnsan Kaynakları"],
+                  ["İşçilik Verimlilik", aktifUrun.stdIscilikSaat+" saat/adet", aktifUrun.gercekIscilikSaat+" saat/adet", sapma.iscilikVerimSapma.toFixed(2), sapma.iscilikVerimSapma>=0?"Lehte":"Aleyhte","Üretim"],
+                  ["NET SAPMA", sapma.stdToplam.toFixed(2)+" TL", sapma.gercToplam.toFixed(2)+" TL", sapma.netSapma.toFixed(2), sapma.netSapma>=0?"Lehte":"Aleyhte",""],
+                ];
+                csvIndir(sat, bas, `standart-sapma-${aktifUrun.urun}-${new Date().toISOString().slice(0,10)}.csv`);
+              }}
+              onPDF={async()=>{
+                await pdfIndir(`Standart Maliyet & Sapma Analizi — ${aktifUrun.urun}`, [{
+                  altBaslik: "Sapma Analizi",
+                  kolonlar: ["Sapma Türü","Standart","Gerçek","Sapma (TL)","Lehte/Aleyhte","Sorumluluk"],
+                  satirlar: [
+                    ["Malzeme Fiyat", aktifUrun.stdMalzemeFiyat+" TL/kg", aktifUrun.gercekMalzemeFiyat+" TL/kg", sapma.malzemeFiyatSapma.toLocaleString("tr-TR")+" ₺", sapma.malzemeFiyatSapma>=0?"✓ Lehte":"✗ Aleyhte","Satın Alma"],
+                    ["Malzeme Miktar", aktifUrun.stdMalzemeMiktar+" kg/adet", aktifUrun.gercekMalzemeMiktar+" kg/adet", sapma.malzemeMiktarSapma.toLocaleString("tr-TR")+" ₺", sapma.malzemeMiktarSapma>=0?"✓ Lehte":"✗ Aleyhte","Üretim"],
+                    ["İşçilik Ücret", aktifUrun.stdIscilikUcret+" TL/saat", aktifUrun.gercekIscilikUcret+" TL/saat", sapma.iscilikUcretSapma.toLocaleString("tr-TR")+" ₺", sapma.iscilikUcretSapma>=0?"✓ Lehte":"✗ Aleyhte","İnsan Kaynakları"],
+                    ["İşçilik Verimlilik", aktifUrun.stdIscilikSaat+" saat/adet", aktifUrun.gercekIscilikSaat+" saat/adet", sapma.iscilikVerimSapma.toLocaleString("tr-TR")+" ₺", sapma.iscilikVerimSapma>=0?"✓ Lehte":"✗ Aleyhte","Üretim"],
+                    ["NET SAPMA", Math.round(sapma.stdToplam).toLocaleString("tr-TR")+" ₺", Math.round(sapma.gercToplam).toLocaleString("tr-TR")+" ₺", Math.round(sapma.netSapma).toLocaleString("tr-TR")+" ₺", sapma.netSapma>=0?"✓ Lehte":"✗ Aleyhte",""],
+                  ],
+                  notlar: `Üretim Miktarı: ${aktifUrun.uretimMiktari} adet`
+                }], `standart-sapma-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+              }}
+            />
+          </div>
           {/* ÖZET KARTLARI */}
           <div className="stat-grid">
             <div className="stat-card">
@@ -1638,12 +1840,12 @@ function ModulStandartMaliyet() {
 
 // ─── MODÜL 5: CVP ANALİZİ & BAŞABAŞ NOKTASI ─────────────────────────────────
 function ModulCVP() {
-  const [urunler, setUrunler] = useState([
+  const [urunler, setUrunler] = useLocalState("mm_cvpUrunler", [
     { id: 1, ad: "Ürün A", satisF: 500, degiskenM: 300, sabitM: 0 },
     { id: 2, ad: "Ürün B", satisF: 800, degiskenM: 450, sabitM: 0 },
   ]);
-  const [sabitGider, setSabitGider] = useState(120000);
-  const [secili, setSecili]         = useState(1);
+  const [sabitGider, setSabitGider] = useLocalState("mm_cvpSabit", 120000);
+  const [secili, setSecili] = useLocalState("mm_cvpSecili", 1);
   const [hedefKar, setHedefKar]     = useState(50000);
   const [gosterGrafik, setGosterGrafik] = useState(true);
 
@@ -1739,6 +1941,35 @@ function ModulCVP() {
       </div>
 
       {/* SONUÇ KARTLARI */}
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+        <IndirButonlari
+          onCSV={()=>{
+            const bas = ["Parametre","Değer"];
+            const sat = [
+              ["Ürün",urun.ad],["Satış Fiyatı",urun.satisF+" TL/adet"],["Değişken Maliyet",urun.degiskenM+" TL/adet"],
+              ["Sabit Gider",sabitGider+" TL"],["Katkı Marjı",km+" TL"],["KM Oranı","%"+(kmOrani*100).toFixed(1)],
+              ["Başabaş (Adet)",bbAdet],["Başabaş (TL)",bbTL],["Hedef Kâr",hedefKar+" TL"],["Hedef Satış (Adet)",hedefAdet],
+            ];
+            csvIndir(sat, bas, `cvp-analizi-${new Date().toISOString().slice(0,10)}.csv`);
+          }}
+          onPDF={async()=>{
+            await pdfIndir(`CVP Analizi — ${urun.ad}`, [{
+              altBaslik: "Başabaş ve Kâr Analizi",
+              kolonlar: ["Parametre","Değer"],
+              satirlar: [
+                ["Satış Fiyatı", urun.satisF.toLocaleString("tr-TR")+" ₺/adet"],
+                ["Değişken Maliyet", urun.degiskenM.toLocaleString("tr-TR")+" ₺/adet"],
+                ["Katkı Marjı", km.toLocaleString("tr-TR")+" ₺  (%"+(kmOrani*100).toFixed(1)+")"],
+                ["Sabit Gider", sabitGider.toLocaleString("tr-TR")+" ₺"],
+                ["Başabaş Noktası", bbAdet.toLocaleString("tr-TR")+" adet  /  "+bbTL.toLocaleString("tr-TR")+" ₺"],
+                ["Hedef Kâr", hedefKar.toLocaleString("tr-TR")+" ₺"],
+                ["Hedef Satış Miktarı", hedefAdet.toLocaleString("tr-TR")+" adet"],
+                ["Güvenlik Marjı", "%"+guvenlikPaylasi.toFixed(1)],
+              ],
+            }], `cvp-analizi-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+          }}
+        />
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
         {[
           {label:"Katkı Marjı",        v:formatTL(km),                              renk:"var(--green)"},
@@ -1862,7 +2093,7 @@ const BUTCE_VARSAYILAN = {
 };
 
 function ModulButceKontrol() {
-  const [veri, setVeri]           = useState(BUTCE_VARSAYILAN);
+  const [veri, setVeri] = useLocalState("mm_butce", BUTCE_VARSAYILAN);
   const [seciliAy, setSeciliAy]   = useState(0);
   const [gorunum, setGorunum]     = useState("ozet"); // ozet | esnek | trend
   const [duzenle, setDuzenle]     = useState(false);
@@ -1930,11 +2161,36 @@ function ModulButceKontrol() {
       </div>
 
       {/* GÖRÜNÜM SEÇİCİ */}
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
         {[{k:"ozet",l:"Özet"},{k:"esnek",l:"Esnek Bütçe"},{k:"trend",l:"Trend"}].map(({k,l})=>(
           <button key={k} className={`btn ${gorunum===k?"btn-primary":"btn-ghost"}`} onClick={()=>setGorunum(k)}>{l}</button>
         ))}
         <button className="btn btn-ghost" onClick={()=>setDuzenle(d=>!d)}>✏ Düzenle</button>
+        <div style={{marginLeft:"auto"}}>
+          <IndirButonlari
+            onCSV={()=>{
+              const bas = ["Ay","Plan Adet","Gerçek Adet","Plan Sabit","Gerçek Sabit","Plan Değişken","Gerçek Değişken","Plan Kâr","Gerçek Kâr","Kâr Sapması"];
+              const sat = veri.aylar.map(a=>{
+                const pk = a.planAdet*veri.satisF - a.planSabit - a.planDegisken;
+                const gk = a.gercekAdet*veri.satisF - a.gercekSabit - a.gercekDegisken;
+                return [AYLAR[a.ay], a.planAdet, a.gercekAdet, a.planSabit, a.gercekSabit, a.planDegisken, a.gercekDegisken, pk.toFixed(2), gk.toFixed(2), (gk-pk).toFixed(2)];
+              });
+              csvIndir(sat, bas, `butce-kontrol-${new Date().toISOString().slice(0,10)}.csv`);
+            }}
+            onPDF={async()=>{
+              const satirlar = veri.aylar.map(a=>{
+                const pk = a.planAdet*veri.satisF - a.planSabit - a.planDegisken;
+                const gk = a.gercekAdet*veri.satisF - a.gercekSabit - a.gercekDegisken;
+                return [AYLAR[a.ay], a.planAdet, a.gercekAdet, Math.round(pk).toLocaleString("tr-TR")+" ₺", Math.round(gk).toLocaleString("tr-TR")+" ₺", (gk-pk>=0?"+":"")+Math.round(gk-pk).toLocaleString("tr-TR")+" ₺"];
+              });
+              await pdfIndir("Bütçe Kontrol Raporu", [{
+                altBaslik: "Aylık Plan / Gerçekleşen Karşılaştırması",
+                kolonlar: ["Ay","Plan Adet","Gerçek Adet","Plan Kâr","Gerçek Kâr","Kâr Sapması"],
+                satirlar,
+              }], `butce-kontrol-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+            }}
+          />
+        </div>
       </div>
 
       {/* ÖZET GÖRÜNÜM */}
@@ -2142,7 +2398,7 @@ const SAFHA_VARSAYILAN = [
 ];
 
 function ModulSafhaMaliyet() {
-  const [safhalar, setSafhalar] = useState(SAFHA_VARSAYILAN);
+  const [safhalar, setSafhalar] = useLocalState("mm_safhalar", SAFHA_VARSAYILAN);
   const [secili, setSecili]     = useState(1);
   const [duzenle, setDuzenle]   = useState(false);
   const [form, setForm]         = useState(null);
@@ -2221,7 +2477,7 @@ function ModulSafhaMaliyet() {
       </div>
 
       {/* SAFHA SEÇİCİ */}
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         {safhalar.map(s => (
           <button key={s.id}
             className={`btn ${secili===s.id?"btn-primary":"btn-ghost"}`}
@@ -2234,6 +2490,46 @@ function ModulSafhaMaliyet() {
           setSafhalar(ss=>[...ss,{id,ad:`Safha ${id}`,donemBasiYM:0,donemBasiTamamlanma:0,donemGiren:1000,donemTamamlanan:900,donemSonuYM:100,donemSonuTamamlanma:50,malzemeMaliyet:100000,iscilikMaliyet:50000,gugMaliyet:25000,oncekiSafhaMaliyet:0}]);
           setSecili(id);
         }}>+ Safha Ekle</button>
+        {safha && h && (
+          <div style={{marginLeft:"auto"}}>
+            <IndirButonlari
+              onCSV={()=>{
+                const bas = ["Kalem","Değer"];
+                const sat = [
+                  ["Safha",safha.ad],
+                  ["Dönem Başı YM",safha.donemBasiYM+" adet (%"+safha.donemBasiTamamlanma+")"],
+                  ["Dönemde Giren",safha.donemGiren+" adet"],
+                  ["Tamamlanan",safha.donemTamamlanan+" adet"],
+                  ["Dönem Sonu YM",safha.donemSonuYM+" adet (%"+safha.donemSonuTamamlanma+")"],
+                  ["Toplam Maliyet Havuzu",h.toplamHavuz.toFixed(2)+" TL"],
+                  ["Eşdeğer Birim (İşçilik)",Math.round(h.ebIscilik)],
+                  ["Birim Maliyet",h.bmToplam.toFixed(4)+" TL"],
+                  ["Tamamlanan Maliyet",h.tamamlananMaliyet.toFixed(2)+" TL"],
+                  ["Dönem Sonu YM Maliyeti",h.ymMaliyet.toFixed(2)+" TL"],
+                ];
+                csvIndir(sat, bas, `safha-maliyeti-${safha.ad}-${new Date().toISOString().slice(0,10)}.csv`);
+              }}
+              onPDF={async()=>{
+                await pdfIndir(`Safha Maliyeti — ${safha.ad}`, [
+                  { altBaslik:"Fiziksel Akım", kolonlar:["Kalem","Giriş","Çıkış"], satirlar:[
+                    ["Dönem Başı YM / Tamamlanan", safha.donemBasiYM+" adet", safha.donemTamamlanan+" adet"],
+                    ["Dönemde Giren / Dönem Sonu YM", safha.donemGiren+" adet", safha.donemSonuYM+" adet (%"+safha.donemSonuTamamlanma+")"],
+                  ]},
+                  { altBaslik:"Birim Maliyet Hesabı", kolonlar:["Maliyet Unsuru","Toplam","Eşdeğer Birim","Birim Maliyet"], satirlar:[
+                    ["Direkt Malzeme", safha.malzemeMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebMalzeme), h.bmMalzeme.toFixed(2)+" ₺"],
+                    ["Direkt İşçilik", safha.iscilikMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebIscilik), h.bmIscilik.toFixed(2)+" ₺"],
+                    ["GÜG", safha.gugMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebGug), h.bmGug.toFixed(2)+" ₺"],
+                    ["TOPLAM", Math.round(h.toplamHavuz).toLocaleString("tr-TR")+" ₺", "", h.bmToplam.toFixed(2)+" ₺"],
+                  ]},
+                  { altBaslik:"Maliyet Dağıtımı", kolonlar:["Kalem","Tutar"], satirlar:[
+                    ["Tamamlanan ("+safha.donemTamamlanan+" adet)", Math.round(h.tamamlananMaliyet).toLocaleString("tr-TR")+" ₺"],
+                    ["Dönem Sonu YM ("+safha.donemSonuYM+" adet)", Math.round(h.ymMaliyet).toLocaleString("tr-TR")+" ₺"],
+                  ]},
+                ], `safha-maliyeti-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {safha && h && !duzenle && (
