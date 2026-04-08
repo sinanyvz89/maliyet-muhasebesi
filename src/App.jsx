@@ -25,6 +25,21 @@ function csvIndir(satirlar, basliklar, dosyaAdi) {
   URL.revokeObjectURL(url);
 }
 
+// Türkçe karakter dönüştürücü
+function trChar(metin) {
+  if (typeof metin !== "string") return String(metin ?? "");
+  return metin
+    .replace(/ş/g,"s").replace(/Ş/g,"S")
+    .replace(/ğ/g,"g").replace(/Ğ/g,"G")
+    .replace(/ü/g,"u").replace(/Ü/g,"U")
+    .replace(/ö/g,"o").replace(/Ö/g,"O")
+    .replace(/ç/g,"c").replace(/Ç/g,"C")
+    .replace(/ı/g,"i").replace(/İ/g,"I")
+    .replace(/â/g,"a").replace(/Â/g,"A")
+    .replace(/î/g,"i").replace(/Î/g,"I")
+    .replace(/û/g,"u").replace(/Û/g,"U");
+}
+
 async function pdfIndir(baslik, tablolar, dosyaAdi, altBilgi) {
   const { jsPDF } = await loadJsPDF();
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -32,26 +47,35 @@ async function pdfIndir(baslik, tablolar, dosyaAdi, altBilgi) {
   doc.setFillColor(15,17,23);
   doc.rect(0,0,297,20,"F");
   doc.setTextColor(124,184,255); doc.setFontSize(13); doc.setFont("helvetica","bold");
-  doc.text(baslik, 14, 13);
+  doc.text(trChar(baslik), 14, 13);
   doc.setTextColor(136,146,170); doc.setFontSize(9); doc.setFont("helvetica","normal");
   doc.text("Tarih: " + tarih, 250, 13);
   let y = 26;
   tablolar.forEach(({ altBaslik, kolonlar, satirlar, notlar }) => {
     if (altBaslik) {
       doc.setTextColor(62,207,142); doc.setFontSize(10); doc.setFont("helvetica","bold");
-      doc.text(altBaslik, 14, y); y += 5;
+      doc.text(trChar(altBaslik), 14, y); y += 5;
     }
     doc.autoTable({
-      startY: y, head: [kolonlar], body: satirlar, theme: "grid",
+      startY: y,
+      head: [kolonlar.map(trChar)],
+      body: satirlar.map(satir => satir.map(trChar)),
+      theme: "grid",
       styles: { fontSize: 8, cellPadding: 2, textColor: [40,40,40] },
       headStyles: { fillColor: [31,37,53], textColor: [124,184,255], fontStyle: "bold" },
       alternateRowStyles: { fillColor: [245,247,250] },
       margin: { left: 14, right: 14 },
     });
     y = doc.lastAutoTable.finalY + 8;
-    if (notlar) { doc.setTextColor(100,100,100); doc.setFontSize(8); doc.text(notlar, 14, y); y += 8; }
+    if (notlar) {
+      doc.setTextColor(100,100,100); doc.setFontSize(8);
+      doc.text(trChar(notlar), 14, y); y += 8;
+    }
   });
-  if (altBilgi) { doc.setTextColor(150,150,150); doc.setFontSize(7); doc.text(altBilgi, 14, doc.internal.pageSize.height - 8); }
+  if (altBilgi) {
+    doc.setTextColor(150,150,150); doc.setFontSize(7);
+    doc.text(trChar(altBilgi), 14, doc.internal.pageSize.height - 8);
+  }
   doc.save(dosyaAdi);
 }
 
