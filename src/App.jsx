@@ -627,8 +627,8 @@ function ModulGiderSiniflandirma() {
                 [{
                   altBaslik: "Gider Listesi",
                   kolonlar: ["Gider Adı","Hesap Kodu","Tutar (TL)","Davranış","Yükleme","Not"],
-                  satirlar: giderler.map(g=>[g.ad, g.hesapKodu+" - "+(HESAP_KODLARI[g.hesapKodu]||""), g.tutar.toLocaleString("tr-TR")+" ₺", g.davranis, g.yukleme, g.not||"-"]),
-                  notlar: `Toplam: ${toplam.toLocaleString("tr-TR")} ₺  |  Sabit: ${sabit.toLocaleString("tr-TR")} ₺  |  Değişken: ${degisken.toLocaleString("tr-TR")} ₺`
+                  satirlar: giderler.map(g=>[g.ad, g.hesapKodu+" - "+(HESAP_KODLARI[g.hesapKodu]||""), g.tutar.toLocaleString("tr-TR")+" TL", g.davranis, g.yukleme, g.not||"-"]),
+                  notlar: `Toplam: ${toplam.toLocaleString("tr-TR")} TL  |  Sabit: ${sabit.toLocaleString("tr-TR")} TL  |  Değişken: ${degisken.toLocaleString("tr-TR")} TL`
                 }],
                 `gider-siniflandirma-${new Date().toISOString().slice(0,10)}.pdf`,
                 "Maliyet Muhasebesi Uzmanlaşma Programı"
@@ -874,9 +874,9 @@ function ModulGUGDagitim() {
               const onDagBas = ["GÜG Kalemi","Tutar (TL)","Anahtar",...merkezler.map(m=>m.ad)];
               const onDagSat = gugGiderler.map(g=>{
                 const toplamA = merkezler.reduce((s,m)=>s+(m.degerler[g.anahtar]||0),0);
-                return [g.ad, g.tutar.toLocaleString("tr-TR")+" ₺", g.anahtar, ...merkezler.map(m=>{
+                return [g.ad, g.tutar.toLocaleString("tr-TR")+" TL", g.anahtar, ...merkezler.map(m=>{
                   const pay = toplamA>0?(m.degerler[g.anahtar]||0)/toplamA:0;
-                  return (g.tutar*pay).toLocaleString("tr-TR")+" ₺";
+                  return (g.tutar*pay).toLocaleString("tr-TR")+" TL";
                 })];
               });
               const kesin = (() => {
@@ -886,7 +886,7 @@ function ModulGUGDagitim() {
                 return um.map(u=>{
                   const pay = ti>0?(u.degerler["İşçi Sayısı"]||0)/ti:0;
                   const yp = ym.reduce((s,y)=>s+y.onDagitimToplam*pay,0);
-                  return [u.ad, u.degerler["İşçi Sayısı"], (pay*100).toFixed(1)+"%", u.onDagitimToplam.toLocaleString("tr-TR")+" ₺", "+"+yp.toLocaleString("tr-TR")+" ₺", (u.onDagitimToplam+yp).toLocaleString("tr-TR")+" ₺"];
+                  return [u.ad, u.degerler["İşçi Sayısı"], (pay*100).toFixed(1)+"%", u.onDagitimToplam.toLocaleString("tr-TR")+" TL", "+"+yp.toLocaleString("tr-TR")+" TL", (u.onDagitimToplam+yp).toLocaleString("tr-TR")+" TL"];
                 });
               })();
               await pdfIndir("GÜG Dağıtım Tablosu", [
@@ -1260,8 +1260,8 @@ function ModulSiparisUretim() {
               await pdfIndir("Sipariş Maliyeti Raporu", [{
                 altBaslik: "İş Emirleri",
                 kolonlar: ["İş Emri","Müşteri","Ürün","Durum","710 Malzeme","720 İşçilik","GÜG Yüklenen","TOPLAM"],
-                satirlar: emirlerHesapli.map(e=>[e.id, e.musteri, e.urun, e.durum, e.malzeme.toLocaleString("tr-TR")+" ₺", e.iscilik.toLocaleString("tr-TR")+" ₺", Math.round(e.gugYuklenen).toLocaleString("tr-TR")+" ₺", Math.round(e.toplamMaliyet).toLocaleString("tr-TR")+" ₺"]),
-                notlar: `GÜG Yükleme Oranı: ${Math.round(gugOrani).toLocaleString("tr-TR")} ₺/saat  |  Toplam Maliyet: ${Math.round(toplamMaliyet).toLocaleString("tr-TR")} ₺`
+                satirlar: emirlerHesapli.map(e=>[e.id, e.musteri, e.urun, e.durum, e.malzeme.toLocaleString("tr-TR")+" TL", e.iscilik.toLocaleString("tr-TR")+" TL", Math.round(e.gugYuklenen).toLocaleString("tr-TR")+" TL", Math.round(e.toplamMaliyet).toLocaleString("tr-TR")+" TL"]),
+                notlar: `GÜG Yükleme Oranı: ${Math.round(gugOrani).toLocaleString("tr-TR")} TL/saat  |  Toplam Maliyet: ${Math.round(toplamMaliyet).toLocaleString("tr-TR")} TL`
               }], `siparis-maliyeti-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
             }}
           />
@@ -1674,11 +1674,11 @@ function ModulStandartMaliyet() {
                   altBaslik: "Sapma Analizi",
                   kolonlar: ["Sapma Türü","Standart","Gerçek","Sapma (TL)","Lehte/Aleyhte","Sorumluluk"],
                   satirlar: [
-                    ["Malzeme Fiyat", aktifUrun.stdMalzemeFiyat+" TL/kg", aktifUrun.gercekMalzemeFiyat+" TL/kg", sapma.malzemeFiyatSapma.toLocaleString("tr-TR")+" ₺", sapma.malzemeFiyatSapma>=0?"✓ Lehte":"✗ Aleyhte","Satın Alma"],
-                    ["Malzeme Miktar", aktifUrun.stdMalzemeMiktar+" kg/adet", aktifUrun.gercekMalzemeMiktar+" kg/adet", sapma.malzemeMiktarSapma.toLocaleString("tr-TR")+" ₺", sapma.malzemeMiktarSapma>=0?"✓ Lehte":"✗ Aleyhte","Üretim"],
-                    ["İşçilik Ücret", aktifUrun.stdIscilikUcret+" TL/saat", aktifUrun.gercekIscilikUcret+" TL/saat", sapma.iscilikUcretSapma.toLocaleString("tr-TR")+" ₺", sapma.iscilikUcretSapma>=0?"✓ Lehte":"✗ Aleyhte","İnsan Kaynakları"],
-                    ["İşçilik Verimlilik", aktifUrun.stdIscilikSaat+" saat/adet", aktifUrun.gercekIscilikSaat+" saat/adet", sapma.iscilikVerimSapma.toLocaleString("tr-TR")+" ₺", sapma.iscilikVerimSapma>=0?"✓ Lehte":"✗ Aleyhte","Üretim"],
-                    ["NET SAPMA", Math.round(sapma.stdToplam).toLocaleString("tr-TR")+" ₺", Math.round(sapma.gercToplam).toLocaleString("tr-TR")+" ₺", Math.round(sapma.netSapma).toLocaleString("tr-TR")+" ₺", sapma.netSapma>=0?"✓ Lehte":"✗ Aleyhte",""],
+                    ["Malzeme Fiyat", aktifUrun.stdMalzemeFiyat+" TL/kg", aktifUrun.gercekMalzemeFiyat+" TL/kg", sapma.malzemeFiyatSapma.toLocaleString("tr-TR")+" TL", sapma.malzemeFiyatSapma>=0?"Lehte":"Aleyhte","Satın Alma"],
+                    ["Malzeme Miktar", aktifUrun.stdMalzemeMiktar+" kg/adet", aktifUrun.gercekMalzemeMiktar+" kg/adet", sapma.malzemeMiktarSapma.toLocaleString("tr-TR")+" TL", sapma.malzemeMiktarSapma>=0?"Lehte":"Aleyhte","Üretim"],
+                    ["İşçilik Ücret", aktifUrun.stdIscilikUcret+" TL/saat", aktifUrun.gercekIscilikUcret+" TL/saat", sapma.iscilikUcretSapma.toLocaleString("tr-TR")+" TL", sapma.iscilikUcretSapma>=0?"Lehte":"Aleyhte","İnsan Kaynakları"],
+                    ["İşçilik Verimlilik", aktifUrun.stdIscilikSaat+" saat/adet", aktifUrun.gercekIscilikSaat+" saat/adet", sapma.iscilikVerimSapma.toLocaleString("tr-TR")+" TL", sapma.iscilikVerimSapma>=0?"Lehte":"Aleyhte","Üretim"],
+                    ["NET SAPMA", Math.round(sapma.stdToplam).toLocaleString("tr-TR")+" TL", Math.round(sapma.gercToplam).toLocaleString("tr-TR")+" TL", Math.round(sapma.netSapma).toLocaleString("tr-TR")+" TL", sapma.netSapma>=0?"Lehte":"Aleyhte",""],
                   ],
                   notlar: `Üretim Miktarı: ${aktifUrun.uretimMiktari} adet`
                 }], `standart-sapma-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
@@ -1981,12 +1981,12 @@ function ModulCVP() {
               altBaslik: "Başabaş ve Kâr Analizi",
               kolonlar: ["Parametre","Değer"],
               satirlar: [
-                ["Satış Fiyatı", urun.satisF.toLocaleString("tr-TR")+" ₺/adet"],
-                ["Değişken Maliyet", urun.degiskenM.toLocaleString("tr-TR")+" ₺/adet"],
-                ["Katkı Marjı", km.toLocaleString("tr-TR")+" ₺  (%"+(kmOrani*100).toFixed(1)+")"],
-                ["Sabit Gider", sabitGider.toLocaleString("tr-TR")+" ₺"],
-                ["Başabaş Noktası", bbAdet.toLocaleString("tr-TR")+" adet  /  "+bbTL.toLocaleString("tr-TR")+" ₺"],
-                ["Hedef Kâr", hedefKar.toLocaleString("tr-TR")+" ₺"],
+                ["Satış Fiyatı", urun.satisF.toLocaleString("tr-TR")+" TL/adet"],
+                ["Değişken Maliyet", urun.degiskenM.toLocaleString("tr-TR")+" TL/adet"],
+                ["Katkı Marjı", km.toLocaleString("tr-TR")+" TL  (%"+(kmOrani*100).toFixed(1)+")"],
+                ["Sabit Gider", sabitGider.toLocaleString("tr-TR")+" TL"],
+                ["Başabaş Noktası", bbAdet.toLocaleString("tr-TR")+" adet  /  "+bbTL.toLocaleString("tr-TR")+" TL"],
+                ["Hedef Kâr", hedefKar.toLocaleString("tr-TR")+" TL"],
                 ["Hedef Satış Miktarı", hedefAdet.toLocaleString("tr-TR")+" adet"],
                 ["Güvenlik Marjı", "%"+guvenlikPaylasi.toFixed(1)],
               ],
@@ -2205,7 +2205,7 @@ function ModulButceKontrol() {
               const satirlar = veri.aylar.map(a=>{
                 const pk = a.planAdet*veri.satisF - a.planSabit - a.planDegisken;
                 const gk = a.gercekAdet*veri.satisF - a.gercekSabit - a.gercekDegisken;
-                return [AYLAR[a.ay], a.planAdet, a.gercekAdet, Math.round(pk).toLocaleString("tr-TR")+" ₺", Math.round(gk).toLocaleString("tr-TR")+" ₺", (gk-pk>=0?"+":"")+Math.round(gk-pk).toLocaleString("tr-TR")+" ₺"];
+                return [AYLAR[a.ay], a.planAdet, a.gercekAdet, Math.round(pk).toLocaleString("tr-TR")+" TL", Math.round(gk).toLocaleString("tr-TR")+" TL", (gk-pk>=0?"+":"")+Math.round(gk-pk).toLocaleString("tr-TR")+" TL"];
               });
               await pdfIndir("Bütçe Kontrol Raporu", [{
                 altBaslik: "Aylık Plan / Gerçekleşen Karşılaştırması",
@@ -2540,14 +2540,14 @@ function ModulSafhaMaliyet() {
                     ["Dönemde Giren / Dönem Sonu YM", safha.donemGiren+" adet", safha.donemSonuYM+" adet (%"+safha.donemSonuTamamlanma+")"],
                   ]},
                   { altBaslik:"Birim Maliyet Hesabı", kolonlar:["Maliyet Unsuru","Toplam","Eşdeğer Birim","Birim Maliyet"], satirlar:[
-                    ["Direkt Malzeme", safha.malzemeMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebMalzeme), h.bmMalzeme.toFixed(2)+" ₺"],
-                    ["Direkt İşçilik", safha.iscilikMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebIscilik), h.bmIscilik.toFixed(2)+" ₺"],
-                    ["GÜG", safha.gugMaliyet.toLocaleString("tr-TR")+" ₺", Math.round(h.ebGug), h.bmGug.toFixed(2)+" ₺"],
-                    ["TOPLAM", Math.round(h.toplamHavuz).toLocaleString("tr-TR")+" ₺", "", h.bmToplam.toFixed(2)+" ₺"],
+                    ["Direkt Malzeme", safha.malzemeMaliyet.toLocaleString("tr-TR")+" TL", Math.round(h.ebMalzeme), h.bmMalzeme.toFixed(2)+" TL"],
+                    ["Direkt İşçilik", safha.iscilikMaliyet.toLocaleString("tr-TR")+" TL", Math.round(h.ebIscilik), h.bmIscilik.toFixed(2)+" TL"],
+                    ["GÜG", safha.gugMaliyet.toLocaleString("tr-TR")+" TL", Math.round(h.ebGug), h.bmGug.toFixed(2)+" TL"],
+                    ["TOPLAM", Math.round(h.toplamHavuz).toLocaleString("tr-TR")+" TL", "", h.bmToplam.toFixed(2)+" TL"],
                   ]},
                   { altBaslik:"Maliyet Dağıtımı", kolonlar:["Kalem","Tutar"], satirlar:[
-                    ["Tamamlanan ("+safha.donemTamamlanan+" adet)", Math.round(h.tamamlananMaliyet).toLocaleString("tr-TR")+" ₺"],
-                    ["Dönem Sonu YM ("+safha.donemSonuYM+" adet)", Math.round(h.ymMaliyet).toLocaleString("tr-TR")+" ₺"],
+                    ["Tamamlanan ("+safha.donemTamamlanan+" adet)", Math.round(h.tamamlananMaliyet).toLocaleString("tr-TR")+" TL"],
+                    ["Dönem Sonu YM ("+safha.donemSonuYM+" adet)", Math.round(h.ymMaliyet).toLocaleString("tr-TR")+" TL"],
                   ]},
                 ], `safha-maliyeti-${new Date().toISOString().slice(0,10)}.pdf`, "Maliyet Muhasebesi Uzmanlaşma Programı");
               }}
