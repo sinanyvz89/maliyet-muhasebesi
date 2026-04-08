@@ -776,23 +776,28 @@ const VARSAYILAN_GUGGERLER = [
 
 function ModulGUGDagitim() {
   const [merkezler, setMerkezler] = useLocalState("mm_merkezler", VARSAYILAN_MERKEZLER);
-  const [gugGiderler, setGugGiderler] = useLocalState("mm_gugGiderler", VARSAYILAN_GUGGERLER);
-  const [yeniGider, setYeniGider] = useState({ ad: "", tutar: "", anahtar: ANAHTARLAR[0] });
+  // Modül 1'deki 730 giderlerini oku
+  const [tumGiderler] = useLocalState("mm_giderler", []);
+  const gider730 = tumGiderler.filter(g => g.hesapKodu === "730");
+
+  // Anahtar seçimlerini ayrı sakla: { [gider.id]: anahtar }
+  const [anahtarlar, setAnahtarlar] = useLocalState("mm_gugAnahtarlar", {});
+
+  // Birleştirilmiş GÜG gider listesi — tutar Modül 1'den, anahtar buradan
+  const gugGiderler = gider730.map(g => ({
+    id: g.id,
+    ad: g.ad,
+    tutar: g.tutar,
+    anahtar: anahtarlar[g.id] || ANAHTARLAR[0],
+  }));
+
+  const anahtarGuncelle = (id, anahtar) => {
+    setAnahtarlar(a => ({ ...a, [id]: anahtar }));
+  };
+
   const [yeniMerkez, setYeniMerkez] = useState({ ad: "", tip: "Üretim" });
   const [aktifAdim, setAktifAdim] = useState(1);
   const [hata, setHata] = useState("");
-  const [duzenleId, setDuzenleId] = useState(null);
-  const [duzenleForm, setDuzenleForm] = useState(null);
-
-  const giderSil = (id) => setGugGiderler(g => g.filter(x => x.id !== id));
-  const giderDuzenleBasla = (g) => { setDuzenleId(g.id); setDuzenleForm({...g}); };
-  const giderDuzenleKaydet = () => {
-    if (!duzenleForm.ad.trim() || +duzenleForm.tutar <= 0) { setHata("Ad ve geçerli tutar zorunludur."); return; }
-    setHata("");
-    setGugGiderler(gs => gs.map(g => g.id === duzenleId ? {...duzenleForm, tutar: +duzenleForm.tutar} : g));
-    setDuzenleId(null); setDuzenleForm(null);
-  };
-  const giderDuzenleIptal = () => { setDuzenleId(null); setDuzenleForm(null); };
 
   const onDagitim = merkezler.map(merkez => {
     let toplam = 0;
@@ -817,13 +822,6 @@ function ModulGUGDagitim() {
 
   const kesinSonuc = kesinDagitim();
   const toplamGUG = gugGiderler.reduce((s, g) => s + g.tutar, 0);
-
-  const giderEkle = () => {
-    if (!yeniGider.ad.trim() || !yeniGider.tutar || +yeniGider.tutar <= 0) { setHata("Gider adı ve geçerli tutar zorunludur."); return; }
-    setHata("");
-    setGugGiderler(g => [...g, { ...yeniGider, id: Date.now(), tutar: +yeniGider.tutar }]);
-    setYeniGider({ ad: "", tutar: "", anahtar: ANAHTARLAR[0] });
-  };
 
   const merkezEkle = () => {
     if (!yeniMerkez.ad.trim()) { setHata("Merkez adı boş olamaz."); return; }
@@ -908,104 +906,69 @@ function ModulGUGDagitim() {
       {aktifAdim === 1 && (
         <div className="card">
           <div className="card-title">Ön Dağıtım Tablosu</div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>GÜG Kalemi</th><th>Tutar</th><th>Anahtar</th>
-                  {merkezler.map(m => (
-                    <th key={m.id} style={{color:m.tip==="Üretim"?"var(--green)":"var(--amber)"}}>
-                      {m.ad}<div style={{fontSize:9,opacity:.6,fontWeight:400}}>{m.tip}</div>
-                    </th>
-                  ))}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {gugGiderler.map(g => {
-                  const toplamAnahtar = merkezler.reduce((s,m)=>s+(m.degerler[g.anahtar]||0),0);
-                  if (duzenleId === g.id) {
-                    return (
-                      <tr key={g.id} style={{background:"rgba(79,142,247,.06)"}}>
-                        <td>
-                          <input style={{width:"100%",background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:4,padding:"4px 8px",fontFamily:"var(--mono)",fontSize:12,color:"var(--text)",outline:"none"}}
-                            value={duzenleForm.ad} onChange={e=>setDuzenleForm(f=>({...f,ad:e.target.value}))}/>
-                        </td>
-                        <td>
-                          <input type="number" style={{width:90,background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:4,padding:"4px 8px",fontFamily:"var(--mono)",fontSize:12,color:"var(--text)",outline:"none"}}
-                            value={duzenleForm.tutar} onChange={e=>setDuzenleForm(f=>({...f,tutar:e.target.value}))}/>
-                        </td>
-                        <td>
-                          <select style={{background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:4,padding:"4px 6px",fontFamily:"var(--mono)",fontSize:11,color:"var(--text)",outline:"none"}}
-                            value={duzenleForm.anahtar} onChange={e=>setDuzenleForm(f=>({...f,anahtar:e.target.value}))}>
-                            {ANAHTARLAR.map(a=><option key={a}>{a}</option>)}
-                          </select>
-                        </td>
-                        {merkezler.map(m => <td key={m.id} style={{color:"var(--muted)",fontSize:11}}>—</td>)}
-                        <td>
-                          <div style={{display:"flex",gap:4}}>
-                            <button className="btn btn-primary btn-sm" onClick={giderDuzenleKaydet}>✓</button>
-                            <button className="btn btn-ghost btn-sm" onClick={giderDuzenleIptal}>✕</button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-                  return (
-                    <tr key={g.id}>
-                      <td style={{fontWeight:500}}>{g.ad}</td>
-                      <td style={{fontFamily:"var(--mono)",color:"var(--amber)"}}>{formatTL(g.tutar)}</td>
-                      <td><span className="hesap-kodu" style={{fontSize:10}}>{g.anahtar}</span></td>
-                      {merkezler.map(m => {
-                        const pay = toplamAnahtar > 0 ? (m.degerler[g.anahtar]||0)/toplamAnahtar : 0;
-                        const tutar = g.tutar * pay;
-                        return (
-                          <td key={m.id} style={{fontFamily:"var(--mono)",fontSize:12,color:m.tip==="Üretim"?"var(--text)":"var(--muted)"}}>
-                            {tutar > 0 ? formatTL(tutar) : "—"}
-                            {pay > 0 && <div style={{fontSize:9,color:"var(--muted)",opacity:.7}}>%{(pay*100).toFixed(0)}</div>}
-                          </td>
-                        );
-                      })}
-                      <td>
-                        <div style={{display:"flex",gap:4}}>                          <button className="btn btn-ghost btn-sm" onClick={()=>giderDuzenleBasla(g)}>✏</button>
-                          <button className="btn btn-ghost btn-sm btn-danger" onClick={()=>giderSil(g.id)}>Sil</button>
-                        </div>
-                      </td>
+          {gugGiderler.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">📋</div>
+              <p>Henüz 730 hesabında gider yok.<br/>Gider Sınıflandırma sekmesinden 730 kodlu gider ekleyin.</p>
+            </div>
+          ) : (
+            <>
+              <div style={{fontSize:12,color:"var(--muted)",marginBottom:12,padding:"8px 12px",background:"rgba(79,142,247,.06)",borderRadius:6,border:"1px solid rgba(79,142,247,.15)"}}>
+                Giderler <strong style={{color:"var(--accent2)"}}>Gider Sınıflandırma</strong> sekmesindeki 730 hesabından otomatik geliyor. Burada sadece dağıtım anahtarını seçin.
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>GÜG Kalemi</th><th>Tutar</th><th>Dağıtım Anahtarı</th>
+                      {merkezler.map(m => (
+                        <th key={m.id} style={{color:m.tip==="Üretim"?"var(--green)":"var(--amber)"}}>
+                          {m.ad}<div style={{fontSize:9,opacity:.6,fontWeight:400}}>{m.tip}</div>
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-                <tr style={{background:"var(--surface2)"}}>
-                  <td style={{fontWeight:600,fontSize:12}}>TOPLAM</td>
-                  <td style={{fontFamily:"var(--mono)",fontWeight:600,color:"var(--amber)"}}>{formatTL(toplamGUG)}</td>
-                  <td></td>
-                  {onDagitim.map(m => (
-                    <td key={m.id} style={{fontFamily:"var(--mono)",fontWeight:600,color:m.tip==="Üretim"?"var(--green)":"var(--amber)"}}>{formatTL(m.onDagitimToplam)}</td>
-                  ))}
-                  <td></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="divider"/>
-          <div className="card-title">Yeni GÜG Kalemi Ekle</div>
-          <div className="form-grid">
-            <div className="form-group">
-              <label className="form-label">Gider Adı</label>
-              <input className="form-input" placeholder="Örn: Su gideri" value={yeniGider.ad} onChange={e => setYeniGider(g=>({...g,ad:e.target.value}))}/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Tutar (TL)</label>
-              <input className="form-input" type="number" value={yeniGider.tutar} onChange={e => setYeniGider(g=>({...g,tutar:e.target.value}))}/>
-            </div>
-            <div className="form-group" style={{gridColumn:"1/-1"}}>
-              <label className="form-label">Dağıtım Anahtarı</label>
-              <select className="form-select" value={yeniGider.anahtar} onChange={e => setYeniGider(g=>({...g,anahtar:e.target.value}))}>
-                {ANAHTARLAR.map(a => <option key={a}>{a}</option>)}
-              </select>
-            </div>
-          </div>
-          {hata && <div style={{fontSize:12,color:"var(--red)",margin:"8px 0",padding:"8px 12px",background:"rgba(255,85,85,.08)",borderRadius:6}}>⚠ {hata}</div>}
-          <button className="btn btn-primary" style={{marginTop:12}} onClick={giderEkle}>+ Gider Ekle</button>
+                  </thead>
+                  <tbody>
+                    {gugGiderler.map(g => {
+                      const toplamAnahtar = merkezler.reduce((s,m)=>s+(m.degerler[g.anahtar]||0),0);
+                      return (
+                        <tr key={g.id}>
+                          <td style={{fontWeight:500}}>{g.ad}</td>
+                          <td style={{fontFamily:"var(--mono)",color:"var(--amber)"}}>{formatTL(g.tutar)}</td>
+                          <td>
+                            <select
+                              style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:4,padding:"4px 8px",fontFamily:"var(--mono)",fontSize:11,color:"var(--text)",outline:"none"}}
+                              value={g.anahtar}
+                              onChange={e=>anahtarGuncelle(g.id, e.target.value)}>
+                              {ANAHTARLAR.map(a=><option key={a}>{a}</option>)}
+                            </select>
+                          </td>
+                          {merkezler.map(m => {
+                            const pay = toplamAnahtar > 0 ? (m.degerler[g.anahtar]||0)/toplamAnahtar : 0;
+                            const tutar = g.tutar * pay;
+                            return (
+                              <td key={m.id} style={{fontFamily:"var(--mono)",fontSize:12,color:m.tip==="Üretim"?"var(--text)":"var(--muted)"}}>
+                                {tutar > 0 ? formatTL(tutar) : "—"}
+                                {pay > 0 && <div style={{fontSize:9,color:"var(--muted)",opacity:.7}}>%{(pay*100).toFixed(0)}</div>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    <tr style={{background:"var(--surface2)"}}>
+                      <td style={{fontWeight:600,fontSize:12}}>TOPLAM</td>
+                      <td style={{fontFamily:"var(--mono)",fontWeight:600,color:"var(--amber)"}}>{formatTL(toplamGUG)}</td>
+                      <td></td>
+                      {onDagitim.map(m => (
+                        <td key={m.id} style={{fontFamily:"var(--mono)",fontWeight:600,color:m.tip==="Üretim"?"var(--green)":"var(--amber)"}}>{formatTL(m.onDagitimToplam)}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
